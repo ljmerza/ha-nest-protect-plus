@@ -1,13 +1,5 @@
 {
     "name": "Nest Protect Plus",
-    "domains": [
-        "binary_sensor",
-        "lock",
-        "sensor",
-        "select",
-        "switch"
-    ],
     "homeassistant": "2026.7.0",
-    "render_readme": true,
-    "iot_class": "Cloud Push"
+    "render_readme": true
 }
