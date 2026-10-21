@@ -27,6 +27,8 @@ NEST_ENVIRONMENTS: dict[str, NestEnvironment] = {
 
 DEFAULT_NEST_ENVIRONMENT = NEST_ENVIRONMENTS[Environment.PRODUCTION]
 
+SUBSCRIBE_TIMEOUT_SECONDS = 600
+
 # / URL for refresh token generation
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 
@@ -44,9 +46,8 @@ NEST_ACCOUNT_OAUTH_SERVICE = "oauth2:https://www.googleapis.com/auth/nest-accoun
 APP_LAUNCH_URL_FORMAT = "{host}/api/0.1/user/{user_id}/app_launch"
 NEST_AUTH_URL_JWT = "https://nestauthproxyservice-pa.googleapis.com/v1/issue_jwt"
 
-# The subscribe long poll idles for up to SUBSCRIBE_TIMEOUT, so only the connect
-# phase can be bounded tightly enough to detect an unreachable transport host.
-SUBSCRIBE_TIMEOUT = 600
+# The subscribe long poll idles for up to SUBSCRIBE_TIMEOUT_SECONDS, so only the
+# connect phase can be bounded tightly enough to detect an unreachable transport host.
 SUBSCRIBE_CONNECT_TIMEOUT = 30
 
 NEST_REQUEST = {
