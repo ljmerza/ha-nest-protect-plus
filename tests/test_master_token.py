@@ -273,3 +273,45 @@ async def test_reauth_with_master_token_drops_cookies(hass: HomeAssistant) -> No
         "android_id": "abcdef0123456789",
         "account_type": "production",
     }
+
+
+async def test_reauth_with_master_token_rejects_other_account(
+    hass: HomeAssistant,
+) -> None:
+    """A master token for a different Nest account must not take over the entry."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="user.1",
+        version=3,
+        data={
+            "issue_token": "https://accounts.google.com/issue",
+            "cookies": "SID=old",
+            "account_type": "production",
+        },
+    )
+    entry.add_to_hass(hass)
+
+    result = await entry.start_reauth_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input={"method": "master_token"}
+    )
+
+    client = _flow_client()
+    client.authenticate = AsyncMock(
+        return_value=MagicMock(access_token="nest-token", userid="user2", user="user.2")
+    )
+    with patch(
+        "custom_components.nest_protect.config_flow.NestClient", return_value=client
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={
+                "google_email": "other@example.com",
+                "oauth_token": "oauth2_4/once",
+            },
+        )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "wrong_account"
+    assert entry.data["cookies"] == "SID=old"
+    assert "master_token" not in entry.data
