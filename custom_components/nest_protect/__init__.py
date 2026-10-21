@@ -86,6 +86,7 @@ class HomeAssistantNestProtectData:
     connection_failures: int = 0
     # Device keys from the account's bucket list at setup; None if not returned.
     listed_device_keys: set[str] | None = None
+    widget_tracks: dict[str, Bucket] = field(default_factory=dict)
 
 
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry):
@@ -152,6 +153,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         raise ConfigEntryAuthFailed("No credentials available")
 
     device_buckets: list[Bucket] = []
+    widget_tracks: dict[str, Bucket] = {}
     areas: dict[str, str] = {}
     listed_device_keys: set[str] | None = None
 
@@ -161,6 +163,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
         if bucket.type == BucketType.BUCKETS:
             listed_device_keys = _listed_device_keys(bucket.value)
+        if bucket.type == BucketType.WIDGET_TRACK:
+            widget_tracks[bucket.object_key] = bucket
 
         if bucket.type == BucketType.WHERE and isinstance(
             bucket.value, WhereBucketValue
@@ -179,6 +183,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         grpc_lock_client=GrpcLockClient(client),
         stream_health=StreamHealth(hass, entry.entry_id),
         listed_device_keys=listed_device_keys,
+        widget_tracks=widget_tracks,
     )
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = entry_data
     # The first data fetch above counts as a response and starts the deadline.
@@ -518,6 +523,13 @@ async def _async_subscribe_for_data(
                 entry_data.devices[key] = kryptonite
 
                 async_dispatcher_send(hass, key, kryptonite)
+
+            # Nest Protect connectivity
+            if key.startswith("widget_track."):
+                widget_track = Bucket(**bucket)
+                entry_data.widget_tracks[key] = widget_track
+
+                async_dispatcher_send(hass, key, widget_track)
 
         if devices_changed:
             # Setup rebuilds the device list and records the new bucket list,
