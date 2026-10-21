@@ -65,7 +65,9 @@ async def async_get_config_entry_diagnostics(
     entry_data: HomeAssistantNestProtectData = hass.data[DOMAIN][entry.entry_id]
     client = entry_data.client
 
-    if issue_token and cookies:
+    if client.master_token:
+        auth = await client.get_access_token_from_master_token()
+    elif issue_token and cookies:
         auth = await client.get_access_token_from_cookies(issue_token, cookies)
     elif refresh_token:
         auth = await client.get_access_token_from_refresh_token(refresh_token)
@@ -100,7 +102,9 @@ async def async_get_device_diagnostics(
     entry_data: HomeAssistantNestProtectData = hass.data[DOMAIN][entry.entry_id]
     client = entry_data.client
 
-    if issue_token and cookies:
+    if client.master_token:
+        auth = await client.get_access_token_from_master_token()
+    elif issue_token and cookies:
         auth = await client.get_access_token_from_cookies(issue_token, cookies)
     elif refresh_token:
         auth = await client.get_access_token_from_refresh_token(refresh_token)

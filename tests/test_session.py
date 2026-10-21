@@ -58,6 +58,7 @@ async def test_restore_valid_session():
     client.issue_token = "https://accounts.google.com/issue"
     client.cookies = "SID=test"
     client.refresh_token = None
+    client.master_token = None
     client.get_first_data = AsyncMock(return_value=_make_first_data())
     client.get_access_token_from_cookies = AsyncMock()
     client.get_access_token_from_refresh_token = AsyncMock()
@@ -96,6 +97,7 @@ async def test_restore_expired_session_falls_through():
     client.issue_token = "https://accounts.google.com/issue"
     client.cookies = "SID=test"
     client.refresh_token = None
+    client.master_token = None
     client.get_access_token_from_cookies = AsyncMock(
         return_value=MagicMock(access_token="new-google-token")
     )
@@ -136,6 +138,7 @@ async def test_restore_rejected_session_falls_through():
     client.issue_token = "https://accounts.google.com/issue"
     client.cookies = "SID=test"
     client.refresh_token = None
+    client.master_token = None
     # First call with persisted token raises 401, second call succeeds
     client.get_first_data = AsyncMock(
         side_effect=[
@@ -176,6 +179,7 @@ async def test_no_persisted_session_uses_cookies():
     client.issue_token = "https://accounts.google.com/issue"
     client.cookies = "SID=test"
     client.refresh_token = None
+    client.master_token = None
     client.get_access_token_from_cookies = AsyncMock(
         return_value=MagicMock(access_token="google-token")
     )
