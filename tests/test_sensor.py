@@ -120,6 +120,8 @@ async def test_co_previous_peak_only_created_when_reported(
             areas=AREAS,
             client=MagicMock(),
             lock_state_cache={},
+            safety_summaries={},
+            structure_names={},
         )
     }
     add_entities = MagicMock()
@@ -213,7 +215,11 @@ async def test_battery_voltage_sensor_only_created_for_protect(
     entry = SimpleNamespace(entry_id="test")
     hass.data[DOMAIN] = {
         entry.entry_id: SimpleNamespace(
-            devices={device.object_key: device}, areas={}, client=MagicMock()
+            devices={device.object_key: device},
+            areas={},
+            client=MagicMock(),
+            safety_summaries={},
+            structure_names={},
         )
     }
     add_entities = MagicMock()

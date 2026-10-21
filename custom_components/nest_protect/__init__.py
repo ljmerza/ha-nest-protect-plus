@@ -87,6 +87,8 @@ class HomeAssistantNestProtectData:
     # Device keys from the account's bucket list at setup; None if not returned.
     listed_device_keys: set[str] | None = None
     widget_tracks: dict[str, Bucket] = field(default_factory=dict)
+    safety_summaries: dict[str, Bucket] = field(default_factory=dict)
+    structure_names: dict[str, str] = field(default_factory=dict)
 
 
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry):
@@ -156,6 +158,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     widget_tracks: dict[str, Bucket] = {}
     areas: dict[str, str] = {}
     listed_device_keys: set[str] | None = None
+    safety_summary_buckets: list[Bucket] = []
+    structure_names: dict[str, str] = {}
 
     for bucket in data.updated_buckets:
         if bucket.type in DEVICE_BUCKET_TYPES:
@@ -165,6 +169,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             listed_device_keys = _listed_device_keys(bucket.value)
         if bucket.type == BucketType.WIDGET_TRACK:
             widget_tracks[bucket.object_key] = bucket
+        if bucket.type == BucketType.SAFETY_SUMMARY:
+            safety_summary_buckets.append(bucket)
+
+        if bucket.type == BucketType.STRUCTURE and (name := bucket.value.get("name")):
+            structure_names[bucket.object_key.removeprefix("structure.")] = name
 
         if bucket.type == BucketType.WHERE and isinstance(
             bucket.value, WhereBucketValue
@@ -175,6 +184,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
     devices: dict[str, Bucket] = {b.object_key: b for b in device_buckets}
 
+    # Nest returns a safety summary for every home, including homes without a
+    # Protect, where it would only ever report zeros.
+    protect_structure_ids = {
+        b.value.get("structure_id")
+        for b in device_buckets
+        if b.type == BucketType.TOPAZ
+    }
+    safety_summaries: dict[str, Bucket] = {
+        b.object_key: b
+        for b in safety_summary_buckets
+        if b.object_key.removeprefix("safety_summary.") in protect_structure_ids
+    }
+
     entry_data = HomeAssistantNestProtectData(
         devices=devices,
         areas=areas,
@@ -184,6 +206,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         stream_health=StreamHealth(hass, entry.entry_id),
         listed_device_keys=listed_device_keys,
         widget_tracks=widget_tracks,
+        safety_summaries=safety_summaries,
+        structure_names=structure_names,
     )
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = entry_data
     # The first data fetch above counts as a response and starts the deadline.
@@ -242,7 +266,10 @@ def _is_reported_device(
         return True
 
     # Sparse responses can omit the serial number the device was registered with.
-    return not _device_bucket_keys(hass, device.id).isdisjoint(entry_data.devices)
+    # Home devices are keyed by structure, so match their safety summary buckets.
+    return not _device_bucket_keys(hass, device.id).isdisjoint(
+        entry_data.devices.keys() | entry_data.safety_summaries.keys()
+    )
 
 
 @callback
@@ -530,6 +557,13 @@ async def _async_subscribe_for_data(
                 entry_data.widget_tracks[key] = widget_track
 
                 async_dispatcher_send(hass, key, widget_track)
+
+            # Home safety summaries
+            if key in entry_data.safety_summaries:
+                safety_summary = Bucket(**bucket)
+                entry_data.safety_summaries[key] = safety_summary
+
+                async_dispatcher_send(hass, key, safety_summary)
 
         if devices_changed:
             # Setup rebuilds the device list and records the new bucket list,

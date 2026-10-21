@@ -308,3 +308,20 @@ async def test_remove_device_allowed_when_entry_not_loaded(hass):
     device = MagicMock(id="dev", identifiers={(DOMAIN, "SERIAL_A")})
 
     assert await async_remove_config_entry_device(hass, entry, device)
+
+
+async def test_remove_home_device_blocked_while_reported(hass):
+    """A home safety summary device can't be removed while Nest still reports it."""
+    entry = _loaded_entry_with_devices(hass)
+    entry_data = hass.data[DOMAIN][entry.entry_id]
+    entry_data.safety_summaries = {
+        "safety_summary.S1": Bucket("safety_summary.S1", 1, 1, {"total_warnings": 0})
+    }
+    device = _register_device(
+        hass, entry, "structure.S1", "safety_summary.S1-total_warnings"
+    )
+
+    assert not await async_remove_config_entry_device(hass, entry, device)
+
+    entry_data.safety_summaries = {}
+    assert await async_remove_config_entry_device(hass, entry, device)
