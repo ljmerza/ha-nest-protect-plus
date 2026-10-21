@@ -313,6 +313,9 @@ async def _async_recover_session(
         PynestException,
     ) as err:
         LOGGER.debug("Session recovery failed; retrying background updates: %s", err)
+    except Exception:
+        # Escaping here would end the background task with nothing to restart it.
+        LOGGER.exception("Unexpected error during session recovery; retrying later")
 
     return entry.entry_id in hass.data.get(DOMAIN, {})
 

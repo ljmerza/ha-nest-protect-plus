@@ -699,6 +699,9 @@ async def test_lock_batch_clears_auth_failures_only(hass):
         (NestServiceException("unavailable"), False),
         (NotAuthenticatedException("rejected"), False),
         (BadCredentialsException("revoked"), True),
+        (Exception("unexpected"), False),
+        (KeyError("detail"), False),
+        (TypeError("unexpected keyword argument"), False),
     ],
 )
 async def test_auth_recovery_handles_refresh_errors(
