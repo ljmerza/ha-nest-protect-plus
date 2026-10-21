@@ -2,7 +2,7 @@
   "domain": "nest_protect",
   "name": "Nest Protect Plus",
   "codeowners": [
-    "@imicknl"
+    "@ljmerza"
   ],
   "config_flow": true,
   "dhcp": [
