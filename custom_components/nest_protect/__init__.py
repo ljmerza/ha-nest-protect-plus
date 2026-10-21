@@ -7,6 +7,7 @@ import contextlib
 import random
 import time
 from dataclasses import dataclass, field
+from functools import partial
 
 from aiohttp import (
     ClientConnectorError,
@@ -15,7 +16,7 @@ from aiohttp import (
     ServerDisconnectedError,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.device_registry import DeviceEntry
@@ -116,7 +117,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         hass, STORAGE_VERSION, STORAGE_KEY_FORMAT.format(entry_id=entry.entry_id)
     )
 
-    session_manager = NestSessionManager(client=client, store=store)
+    session_manager = NestSessionManager(
+        client=client,
+        store=store,
+        on_cookies_refreshed=partial(_persist_refreshed_cookies, hass, entry),
+    )
 
     try:
         data = await session_manager.async_setup()
@@ -130,9 +135,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
     if data is None:
         raise ConfigEntryAuthFailed("No credentials available")
-
-    # Update cookies in config entry if Google returned refreshed ones
-    _persist_refreshed_cookies(hass, entry, client, session_manager)
 
     device_buckets: list[Bucket] = []
     areas: dict[str, str] = {}
@@ -266,21 +268,17 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     await store.async_remove()
 
 
+@callback
 def _persist_refreshed_cookies(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    client: NestClient,
-    sm: NestSessionManager,
+    hass: HomeAssistant, entry: ConfigEntry, new_cookies: str
 ) -> None:
-    """Persist Google-rotated cookies back to the config entry and client.
+    """Persist Google-rotated cookies back to the config entry.
 
     Google may rotate OAuth cookies during ``get_access_token_from_cookies``.
-    Without writing them back, a HA restart would use stale cookies and force
-    re-authentication; the in-memory client also needs the update so the next
-    refresh in the same HA session uses fresh cookies.
+    Without writing them back, a setup retry or HA restart would use stale
+    cookies and eventually force re-authentication.
     """
-    new_cookies = sm.refreshed_cookies
-    if not new_cookies or new_cookies == entry.data.get(CONF_COOKIES):
+    if new_cookies == entry.data.get(CONF_COOKIES):
         return
 
     LOGGER.debug("Persisting refreshed Nest cookies")
@@ -288,7 +286,6 @@ def _persist_refreshed_cookies(
         entry,
         data={**entry.data, CONF_COOKIES: new_cookies},
     )
-    client.cookies = new_cookies
 
 
 async def _async_recover_session(
@@ -313,13 +310,7 @@ async def _async_recover_session(
     ) as err:
         LOGGER.debug("Session recovery failed; retrying background updates: %s", err)
 
-    if entry.entry_id not in hass.data.get(DOMAIN, {}):
-        return False
-
-    _persist_refreshed_cookies(
-        hass, entry, entry_data.client, entry_data.session_manager
-    )
-    return True
+    return entry.entry_id in hass.data.get(DOMAIN, {})
 
 
 def _register_subscribe_task(
@@ -383,7 +374,6 @@ async def _async_subscribe_for_data(
         await asyncio.sleep(0)
 
         await sm.ensure_session()
-        _persist_refreshed_cookies(hass, entry, entry_data.client, sm)
 
         result = await entry_data.client.subscribe_for_data(
             entry_data.client.nest_session.access_token,

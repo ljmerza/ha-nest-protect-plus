@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 
 from homeassistant.helpers.storage import Store
 
@@ -37,21 +39,18 @@ class NestSessionManager:
         self,
         client: NestClient,
         store: Store,
+        on_cookies_refreshed: Callable[[str], None] | None = None,
     ) -> None:
         """Initialize the session manager."""
         self._client = client
         self._store = store
+        self._on_cookies_refreshed = on_cookies_refreshed
         self._consecutive_auth_failures: int = 0
         # Kept apart from auth failures so unrelated errors only slow polling
         # down and never push the user toward re-authentication.
         self._consecutive_errors: int = 0
         self._refresh_lock = asyncio.Lock()
         self._refresh_generation: int = 0
-
-    @property
-    def refreshed_cookies(self) -> str | None:
-        """Proxy to client's refreshed_cookies property."""
-        return self._client.refreshed_cookies
 
     @property
     def consecutive_auth_failures(self) -> int:
@@ -171,9 +170,10 @@ class NestSessionManager:
         if self._client.master_token:
             auth = await self._client.get_access_token_from_master_token()
         elif self._client.issue_token and self._client.cookies:
-            auth = await self._client.get_access_token_from_cookies(
-                self._client.issue_token, self._client.cookies
-            )
+            with self._report_rotated_cookies():
+                auth = await self._client.get_access_token_from_cookies(
+                    self._client.issue_token, self._client.cookies
+                )
         elif self._client.refresh_token:
             auth = await self._client.get_access_token_from_refresh_token(
                 self._client.refresh_token
@@ -224,7 +224,8 @@ class NestSessionManager:
         """Refresh the Nest session; the caller must hold the refresh lock."""
         if not self._client.auth or self._client.auth.is_expired():
             LOGGER.debug("Retrieving new Google access token")
-            await self._client.get_access_token()
+            with self._report_rotated_cookies():
+                await self._client.get_access_token()
 
         if not self._client.auth:
             return False
@@ -235,6 +236,19 @@ class NestSessionManager:
         await self._async_persist(self._client.nest_session)
         self._refresh_generation += 1
         return True
+
+    @contextmanager
+    def _report_rotated_cookies(self) -> Iterator[None]:
+        """Report cookies rotated by a Google token exchange, even if it fails.
+
+        Google may already have invalidated the previous cookies, so they must be
+        stored before any later auth step gets a chance to fail.
+        """
+        try:
+            yield
+        finally:
+            if self._on_cookies_refreshed and self._client.refreshed_cookies:
+                self._on_cookies_refreshed(self._client.refreshed_cookies)
 
     async def _async_persist(self, nest_session: NestResponse) -> None:
         """Save Nest session to store for reuse across restarts."""
