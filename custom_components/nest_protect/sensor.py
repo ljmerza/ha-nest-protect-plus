@@ -14,9 +14,9 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import (
-    CONCENTRATION_PARTS_PER_MILLION,
     PERCENTAGE,
     UnitOfElectricPotential,
+    UnitOfRatio,
     UnitOfTemperature,
 )
 from homeassistant.helpers.entity import EntityCategory
@@ -187,7 +187,7 @@ SENSOR_DESCRIPTIONS: list[NestProtectSensorDescription] = [
         key="co_previous_peak",
         translation_key="co_previous_peak",
         device_class=SensorDeviceClass.CO,
-        native_unit_of_measurement=CONCENTRATION_PARTS_PER_MILLION,
+        native_unit_of_measurement=UnitOfRatio.PARTS_PER_MILLION,
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     # TODO Add Color Status (gray, green, yellow, red)
