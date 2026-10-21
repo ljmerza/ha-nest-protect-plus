@@ -7,11 +7,10 @@ from collections.abc import Mapping
 from typing import Any
 
 from homeassistant.components.diagnostics import REDACTED, async_redact_data
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntry
 
-from . import HomeAssistantNestProtectData
+from . import HomeAssistantNestProtectData, NestProtectConfigEntry
 from .const import (
     CONF_ANDROID_ID,
     CONF_COOKIES,
@@ -74,13 +73,13 @@ NO_VALID_SESSION = "no_valid_session"
 
 
 async def async_get_config_entry_diagnostics(
-    hass: HomeAssistant, entry: ConfigEntry
+    hass: HomeAssistant, entry: NestProtectConfigEntry
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry."""
     data: dict[str, Any] = {"config_entry": dict(entry.data)}
 
-    entry_data: HomeAssistantNestProtectData | None = hass.data.get(DOMAIN, {}).get(
-        entry.entry_id
+    entry_data: HomeAssistantNestProtectData | None = getattr(
+        entry, "runtime_data", None
     )
     if entry_data is None:
         return async_redact_data(data, TO_REDACT)
@@ -109,7 +108,7 @@ async def async_get_config_entry_diagnostics(
 
 
 async def async_get_device_diagnostics(
-    hass: HomeAssistant, entry: ConfigEntry, device: DeviceEntry
+    hass: HomeAssistant, entry: NestProtectConfigEntry, device: DeviceEntry
 ) -> dict[str, Any]:
     """Return diagnostics for a device entry."""
     data: dict[str, Any] = {
@@ -120,8 +119,8 @@ async def async_get_device_diagnostics(
         },
     }
 
-    entry_data: HomeAssistantNestProtectData | None = hass.data.get(DOMAIN, {}).get(
-        entry.entry_id
+    entry_data: HomeAssistantNestProtectData | None = getattr(
+        entry, "runtime_data", None
     )
     if entry_data is None:
         return data
