@@ -42,7 +42,9 @@ from .const import (
     RECONNECT_INTERVALS,
     STORAGE_KEY_FORMAT,
     STORAGE_VERSION,
+    SUBSCRIBE_FAST_RESPONSE_WARNING,
     SUBSCRIBE_HEALTHY_SECONDS,
+    SUBSCRIBE_MIN_INTERVAL_SECONDS,
 )
 from .lock import discovery_signal, lock_signal
 from .pynest.client import NestClient
@@ -84,6 +86,8 @@ class HomeAssistantNestProtectData:
     lock_observe_task: asyncio.Task | None = None
     lock_state_cache: dict[str, LockState] = field(default_factory=dict)
     connection_failures: int = 0
+    # Consecutive subscribes Nest answered with data almost immediately.
+    fast_data_responses: int = 0
     # Device keys from the account's bucket list at setup; None if not returned.
     listed_device_keys: set[str] | None = None
     widget_tracks: dict[str, Bucket] = field(default_factory=dict)
@@ -612,7 +616,23 @@ async def _async_subscribe_for_data(
             for bucket in objects
         ]
 
+        if time.monotonic() - started < SUBSCRIBE_MIN_INTERVAL_SECONDS:
+            entry_data.fast_data_responses += 1
+        else:
+            entry_data.fast_data_responses = 0
+
         sm.record_success()
+
+        if entry_data.fast_data_responses > 1:
+            if entry_data.fast_data_responses == SUBSCRIBE_FAST_RESPONSE_WARNING:
+                LOGGER.warning(
+                    "Subscriber: Nest answered %d subscribes in a row immediately; "
+                    "spacing re-subscribes %ds apart to protect the Nest API",
+                    entry_data.fast_data_responses,
+                    SUBSCRIBE_MIN_INTERVAL_SECONDS,
+                )
+            await asyncio.sleep(SUBSCRIBE_MIN_INTERVAL_SECONDS)
+
         _register_subscribe_task(hass, entry, data)
     except ServerDisconnectedError:
         LOGGER.debug("Subscriber: server disconnected.")
