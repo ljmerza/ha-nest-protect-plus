@@ -27,7 +27,12 @@ from homeassistant.util import dt as dt_util
 
 from . import NestProtectConfigEntry
 from .entity import NestDescriptiveEntity, NestHomeEntity
-from .lock import NestLockBatterySensor, subscribe_to_lock_discovery
+from .lock import (
+    NestLockBatteryReplacementSensor,
+    NestLockBatterySensor,
+    NestLockBatteryVoltageSensor,
+    subscribe_to_lock_discovery,
+)
 from .pynest.enums import BucketType
 
 PARALLEL_UPDATES = 0
@@ -249,7 +254,12 @@ async def async_setup_entry(
     async_add_devices(entities)
 
     # Battery sensors for any discovered Nest x Yale locks.
-    subscribe_to_lock_discovery(hass, entry, async_add_devices, NestLockBatterySensor)
+    for factory in (
+        NestLockBatterySensor,
+        NestLockBatteryVoltageSensor,
+        NestLockBatteryReplacementSensor,
+    ):
+        subscribe_to_lock_discovery(hass, entry, async_add_devices, factory)
 
 
 class NestProtectSensor(NestDescriptiveEntity, SensorEntity):

@@ -12,7 +12,7 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
 )
-from homeassistant.const import PERCENTAGE
+from homeassistant.const import PERCENTAGE, UnitOfElectricPotential
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
@@ -22,7 +22,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import ATTRIBUTION, DOMAIN
 from .pynest.exceptions import NestLockAuthException, PynestException
-from .pynest.grpc_client import GrpcLockClient
+from .pynest.grpc_client import BATTERY_REPLACEMENT_STATES, GrpcLockClient
 from .pynest.lock_models import LockBoltState, LockState
 
 if TYPE_CHECKING:
@@ -268,3 +268,42 @@ class NestLockBatterySensor(SensorEntity):
         """Receive an updated LockState from the observe loop."""
         self._lock_state = lock_state
         self.async_write_ha_state()
+
+
+class NestLockBatteryVoltageSensor(NestLockBatterySensor):
+    """Battery voltage a Nest x Yale lock reports, whatever cells are fitted."""
+
+    _attr_translation_key = "battery_voltage"
+    _attr_device_class = SensorDeviceClass.VOLTAGE
+    _attr_native_unit_of_measurement = UnitOfElectricPotential.VOLT
+    _attr_suggested_display_precision = 2
+
+    def __init__(self, lock_state: LockState) -> None:
+        """Initialize."""
+        super().__init__(lock_state)
+        self._attr_unique_id = f"lock_{lock_state.resource_id}_battery_voltage"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the assessed battery voltage if the lock reports one."""
+        return self._lock_state.battery_voltage
+
+
+class NestLockBatteryReplacementSensor(NestLockBatterySensor):
+    """Whether a Nest x Yale lock says its batteries need replacing."""
+
+    _attr_translation_key = "battery_replacement"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_native_unit_of_measurement = None
+    _attr_state_class = None
+    _attr_options = BATTERY_REPLACEMENT_STATES
+
+    def __init__(self, lock_state: LockState) -> None:
+        """Initialize."""
+        super().__init__(lock_state)
+        self._attr_unique_id = f"lock_{lock_state.resource_id}_battery_replacement"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the lock's replacement indicator if it reports one."""
+        return self._lock_state.battery_replacement

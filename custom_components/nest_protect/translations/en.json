@@ -169,6 +169,14 @@
       },
       "total_warnings": {
         "name": "Safety warnings"
+      },
+      "battery_replacement": {
+        "name": "Battery replacement",
+        "state": {
+          "not_needed": "Not needed",
+          "soon": "Soon",
+          "immediately": "Immediately"
+        }
       }
     },
     "select": {

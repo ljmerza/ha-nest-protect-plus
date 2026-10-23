@@ -5,12 +5,18 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from homeassistant.components.sensor import SensorDeviceClass
+from homeassistant.const import UnitOfElectricPotential
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.nest_protect.const import DOMAIN
-from custom_components.nest_protect.lock import NestLockEntity
+from custom_components.nest_protect.lock import (
+    NestLockBatteryReplacementSensor,
+    NestLockBatteryVoltageSensor,
+    NestLockEntity,
+)
 from custom_components.nest_protect.pynest.exceptions import (
     NestLockAuthException,
     NestLockCommandException,
@@ -174,3 +180,31 @@ async def test_command_does_not_retry_a_rejected_command():
 
     session_manager.async_refresh_session.assert_not_called()
     send.assert_awaited_once()
+
+
+def test_battery_voltage_sensor_reports_the_assessed_voltage():
+    state = _lock_state()
+    state.battery_voltage = 5.12
+    sensor = NestLockBatteryVoltageSensor(state)
+
+    assert sensor.unique_id == "lock_DEVICE_X_battery_voltage"
+    assert sensor.device_class == SensorDeviceClass.VOLTAGE
+    assert sensor.native_unit_of_measurement == UnitOfElectricPotential.VOLT
+    assert sensor.native_value == 5.12
+
+
+def test_battery_voltage_sensor_unknown_when_not_reported():
+    assert NestLockBatteryVoltageSensor(_lock_state()).native_value is None
+
+
+def test_battery_replacement_sensor_reports_the_indicator():
+    state = _lock_state()
+    state.battery_replacement = "soon"
+    sensor = NestLockBatteryReplacementSensor(state)
+
+    assert sensor.unique_id == "lock_DEVICE_X_battery_replacement"
+    assert sensor.device_class == SensorDeviceClass.ENUM
+    assert sensor.options == ["not_needed", "soon", "immediately"]
+    assert sensor.native_unit_of_measurement is None
+    assert sensor.state_class is None
+    assert sensor.native_value == "soon"

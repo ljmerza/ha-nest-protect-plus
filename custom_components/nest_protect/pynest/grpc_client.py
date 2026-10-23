@@ -44,6 +44,15 @@ _NESTLABS_TYPE_URL_PREFIX = "type.nestlabs.com/"
 _SOCK_READ_TIMEOUT = 900
 _CONNECT_TIMEOUT = 60
 _SEND_COMMAND_TIMEOUT = 30
+# BatteryPowerSourceTrait.replacementIndicator -> sensor state. UNSPECIFIED (0)
+# means the lock didn't say, so it maps to nothing (unknown).
+_BATTERY_REPLACEMENT_MAP: dict[int, str] = {
+    weave_power_pb2.BatteryPowerSourceTrait.BATTERY_REPLACEMENT_INDICATOR_NOT_AT_ALL: "not_needed",
+    weave_power_pb2.BatteryPowerSourceTrait.BATTERY_REPLACEMENT_INDICATOR_SOON: "soon",
+    weave_power_pb2.BatteryPowerSourceTrait.BATTERY_REPLACEMENT_INDICATOR_IMMEDIATELY: "immediately",
+}
+BATTERY_REPLACEMENT_STATES: list[str] = list(_BATTERY_REPLACEMENT_MAP.values())
+
 # gRPC status code the gateway uses to end an observe stream at its deadline.
 _GRPC_DEADLINE_EXCEEDED = 4
 _RECONNECT_INITIAL_DELAY = 1.0
@@ -209,6 +218,8 @@ def _extract_lock_state(
     name = label.label if label and label.label else "Lock"
 
     battery_level: float | None = None
+    battery_voltage: float | None = None
+    battery_replacement: str | None = None
     battery_trait = traits.get(
         weave_power_pb2.BatteryPowerSourceTrait.DESCRIPTOR.full_name
     )
@@ -216,6 +227,12 @@ def _extract_lock_state(
         remaining = battery_trait.remaining
         if remaining.HasField("remainingPercent"):
             battery_level = 100.0 * remaining.remainingPercent.value
+    if battery_trait and battery_trait.HasField("assessedVoltage"):
+        battery_voltage = battery_trait.assessedVoltage.value
+    if battery_trait:
+        battery_replacement = _BATTERY_REPLACEMENT_MAP.get(
+            battery_trait.replacementIndicator
+        )
 
     location = _resolve_lock_location(traits, wheres_map or {})
 
@@ -226,6 +243,8 @@ def _extract_lock_state(
         bolt_state=bolt_state,
         software_version=software_version,
         battery_level=battery_level,
+        battery_voltage=battery_voltage,
+        battery_replacement=battery_replacement,
         location=location,
     )
 

@@ -97,6 +97,8 @@ def test_extract_lock_state_locked():
     assert lock.serial_number == "DEVICE_X"
     assert lock.name == "Lock"
     assert lock.battery_level is None
+    assert lock.battery_voltage is None
+    assert lock.battery_replacement is None
     assert lock.location is None
 
 
@@ -162,6 +164,61 @@ def test_extract_lock_state_with_description_and_battery():
     assert lock.software_version == "1.2-7"
     assert lock.name == "Front Door"
     assert lock.battery_level == pytest.approx(85.0)
+
+
+@pytest.mark.parametrize(
+    ("indicator", "expected"),
+    [
+        (
+            weave_power_pb2.BatteryPowerSourceTrait.BATTERY_REPLACEMENT_INDICATOR_NOT_AT_ALL,
+            "not_needed",
+        ),
+        (
+            weave_power_pb2.BatteryPowerSourceTrait.BATTERY_REPLACEMENT_INDICATOR_SOON,
+            "soon",
+        ),
+        (
+            weave_power_pb2.BatteryPowerSourceTrait.BATTERY_REPLACEMENT_INDICATOR_IMMEDIATELY,
+            "immediately",
+        ),
+        (
+            weave_power_pb2.BatteryPowerSourceTrait.BATTERY_REPLACEMENT_INDICATOR_UNSPECIFIED,
+            None,
+        ),
+    ],
+)
+def test_extract_lock_state_reads_battery_voltage_and_replacement(indicator, expected):
+    battery = weave_power_pb2.BatteryPowerSourceTrait()
+    battery.remaining.remainingPercent.value = 0.188
+    battery.assessedVoltage.value = 5.12
+    battery.replacementIndicator = indicator
+
+    lock = _extract_lock_state(
+        "DEVICE_X",
+        {
+            weave_security_pb2.BoltLockTrait.DESCRIPTOR.full_name: _make_bolt_trait(),
+            weave_power_pb2.BatteryPowerSourceTrait.DESCRIPTOR.full_name: battery,
+        },
+    )
+    assert lock.battery_level == pytest.approx(18.8)
+    assert lock.battery_voltage == pytest.approx(5.12)
+    assert lock.battery_replacement == expected
+
+
+def test_extract_lock_state_without_assessed_voltage():
+    # A battery trait that only carries a percentage leaves the voltage unknown.
+    battery = weave_power_pb2.BatteryPowerSourceTrait()
+    battery.remaining.remainingPercent.value = 0.5
+
+    lock = _extract_lock_state(
+        "DEVICE_X",
+        {
+            weave_security_pb2.BoltLockTrait.DESCRIPTOR.full_name: _make_bolt_trait(),
+            weave_power_pb2.BatteryPowerSourceTrait.DESCRIPTOR.full_name: battery,
+        },
+    )
+    assert lock.battery_voltage is None
+    assert lock.battery_replacement is None
 
 
 # -- _compose_lock_device_name ----------------------------------------------
